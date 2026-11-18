@@ -1,0 +1,22 @@
+{
+  "name": "ferry",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ferry: send files up to 4 GB, share a link or QR code, and everything is deleted after ten minutes.",
+  "type": "module",
+  "scripts": {
+    "build:vendor": "esbuild vendor/qrcode-entry.js --bundle --minify --format=iife --platform=browser --outfile=public/vendor/qrcode.js",
+    "build:worker": "esbuild worker.js --bundle --minify --format=esm --platform=browser --target=es2022 --outfile=dist/worker.js",
+    "build": "npm run build:vendor && npm run build:worker",
+    "dev": "wrangler dev --port 3000",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "wrangler": "^3.90.0"
+  }
+}
