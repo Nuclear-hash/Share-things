@@ -831,6 +831,35 @@
     return data;
   }
 
+  // One file is gone but the handoff is still open: the heading, file count and the
+  // "got everything?" card must describe what is left, not what was sent.
+  function syncHandoff(remaining) {
+    const countEl = document.getElementById('share-files');
+    if (countEl) countEl.textContent = `${remaining} file${remaining === 1 ? '' : 's'}`;
+
+    const titleEl = document.querySelector('[data-auto-heading]');
+    if (titleEl) {
+      const left = [...document.querySelectorAll('.file-row')].filter(
+        (row) => !row.querySelector('[data-download]')?.disabled
+      );
+      const nameEl = left.length > 0 ? left[0].querySelector('.file-name') : null;
+      const label =
+        remaining === 1 && nameEl
+          ? nameEl.textContent
+          : `${remaining} file${remaining === 1 ? '' : 's'}`;
+      titleEl.textContent = label;
+      document.title = label + ' — Ferry';
+    }
+
+    const copy = document.getElementById('ack-copy');
+    if (copy) {
+      copy.innerHTML =
+        remaining === 1
+          ? '<h2>Got the file?</h2><p>Say yes and it is deleted right now instead of waiting out the clock.</p>'
+          : '<h2>Got everything?</h2><p>Say yes and these files are deleted right now instead of waiting out the clock.</p>';
+    }
+  }
+
   async function deleteShare(shareId) {
     const response = await fetch('/api/shares/' + encodeURIComponent(shareId), { method: 'DELETE' });
     const data = await response.json().catch(() => ({}));
@@ -903,9 +932,9 @@
     app.innerHTML = `
       <section class="share-page rise">
         <p class="eyebrow">Someone sent you files</p>
-        <h1>${esc(heading)}</h1>
+        <h1${data.title ? '' : ' data-auto-heading="1"'}>${esc(heading)}</h1>
         <p class="share-meta">
-          ${count} file${count === 1 ? '' : 's'} ·
+          <span id="share-files">${count} file${count === 1 ? '' : 's'}</span> ·
           <span class="count" id="share-count"></span>
         </p>
 
@@ -929,7 +958,7 @@
         </section>
 
         <section class="card ack" id="ack-card">
-          <div class="ack-copy">
+          <div class="ack-copy" id="ack-copy">
             <h2>Got everything?</h2>
             <p>Say yes and these files are deleted right now instead of waiting out the clock.</p>
           </div>
@@ -1182,6 +1211,7 @@
             statusEl.innerHTML =
               '<p class="dl-done">Deleted — just that file. The rest of the handoff is still here.</p>';
           }
+          syncHandoff(Number(result.remaining) || 0);
         } catch (error) {
           removeFile.disabled = false;
           removeFile.textContent = original;
