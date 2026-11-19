@@ -657,6 +657,45 @@ async function handleDeleteShare(env, id) {
   return json({ deleted: true });
 }
 
+// The receiver finishing one file can clear just that file; the rest of the handoff stays.
+async function handleDeleteFile(env, shareId, fileId) {
+  await ensureSchema(env);
+  const share = await env.DB.prepare('SELECT id FROM share_things_shares WHERE id = ?')
+    .bind(shareId)
+    .first();
+  if (!share) return json({ deleted: true, shareGone: true, remaining: 0 });
+
+  const file = await env.DB.prepare(
+    'SELECT id, r2_key, chunk_count FROM share_things_files WHERE id = ? AND share_id = ?'
+  )
+    .bind(fileId, shareId)
+    .first();
+
+  if (file) {
+    const clean = await deleteObjects(env, file.r2_key, Number(file.chunk_count) || 1);
+    if (!clean) return fail(503, 'Could not delete that file yet. Try again in a moment.');
+    await env.DB.prepare('DELETE FROM share_things_files WHERE id = ? AND share_id = ?')
+      .bind(fileId, shareId)
+      .run();
+  }
+
+  const left = await env.DB.prepare(
+    'SELECT COUNT(*) AS count FROM share_things_files WHERE share_id = ?'
+  )
+    .bind(shareId)
+    .first();
+  const remaining = Number(left && left.count) || 0;
+
+  if (remaining === 0) {
+    const clean = await purgeShare(env, shareId);
+    if (!clean) return fail(503, 'Could not delete everything yet. Try again in a moment.');
+    await promoteQueue(env).catch(() => {});
+    return json({ deleted: true, shareGone: true, remaining: 0 });
+  }
+
+  return json({ deleted: true, shareGone: false, remaining });
+}
+
 function contentDisposition(name) {
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
@@ -884,6 +923,9 @@ export default {
 
       const fileMatch = pathname.match(/^\/api\/shares\/([a-z0-9]{4,32})\/files\/([a-z0-9]{4,32})$/);
       if (fileMatch) {
+        if (request.method === 'DELETE') {
+          return await handleDeleteFile(env, fileMatch[1], fileMatch[2]);
+        }
         if (request.method !== 'GET' && request.method !== 'HEAD') {
           return fail(405, 'Method not allowed.');
         }

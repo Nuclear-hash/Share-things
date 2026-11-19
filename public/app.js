@@ -816,9 +816,19 @@
     statusEl.innerHTML = `
       <p class="dl-done">Download complete — the whole file arrived.</p>
       <div class="dl-done-actions">
-        <button class="dl dl-delete" type="button" data-delete-share="1">Downloaded — delete my file</button>
+        <button class="dl dl-delete" type="button" data-delete-file="${esc(file.id)}">Downloaded — delete my file</button>
         <a class="dl-link" href="/feedback?reason=file-problem&share=${encodeURIComponent(shareId)}&file=${encodeURIComponent(file.name)}">Something wrong with the file?</a>
       </div>`;
+  }
+
+  async function deleteFile(shareId, fileId) {
+    const response = await fetch(
+      '/api/shares/' + encodeURIComponent(shareId) + '/files/' + encodeURIComponent(fileId),
+      { method: 'DELETE' }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not delete that file yet. Try again.');
+    return data;
   }
 
   async function deleteShare(shareId) {
@@ -959,7 +969,7 @@
         statusEl.innerHTML = `
           <p class="dl-done">Your browser is saving this one itself.</p>
           <div class="dl-done-actions">
-            <button class="dl dl-delete" type="button" data-delete-share="1">It arrived — delete my file</button>
+            <button class="dl dl-delete" type="button" data-delete-file="${esc(file.id)}">It arrived — delete my file</button>
             <button class="dl dl-report" type="button" data-report="${esc(file.name)}">It didn't work</button>
           </div>`;
         return;
@@ -1137,13 +1147,50 @@
     app.addEventListener('click', async (event) => {
       const report = event.target.closest('[data-report]');
       const remove = event.target.closest('[data-delete-share]');
-      if (!report && !remove) return;
+      const removeFile = event.target.closest('[data-delete-file]');
+      if (!report && !remove && !removeFile) return;
       const match = location.pathname.match(/^\/s\/([a-z0-9]+)\/?$/);
       if (!match) return;
       const shareId = match[1];
 
       if (report) {
         goToFeedback('download-failed', shareId, report.dataset.report);
+        return;
+      }
+
+      if (removeFile) {
+        const fileId = removeFile.dataset.deleteFile;
+        const original = removeFile.textContent;
+        removeFile.disabled = true;
+        removeFile.textContent = 'Deleting…';
+        try {
+          const result = await deleteFile(shareId, fileId);
+          if (result.shareGone) {
+            renderDeleted(shareId);
+            return;
+          }
+          const row = removeFile.closest('.file-row');
+          const button = row && row.querySelector('[data-download]');
+          if (button) {
+            button.disabled = true;
+            button.textContent = 'Deleted';
+          }
+          const statusEl = row && row.querySelector('.dl-status');
+          if (statusEl) {
+            statusEl.hidden = false;
+            statusEl.classList.remove('is-failed');
+            statusEl.innerHTML =
+              '<p class="dl-done">Deleted — just that file. The rest of the handoff is still here.</p>';
+          }
+        } catch (error) {
+          removeFile.disabled = false;
+          removeFile.textContent = original;
+          const alert = document.getElementById('ack-error');
+          if (alert) {
+            alert.textContent = error.message;
+            alert.hidden = false;
+          }
+        }
         return;
       }
 

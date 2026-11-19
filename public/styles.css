@@ -1236,6 +1236,24 @@ body.modal-open {
 }
 
 @media (max-width: 640px) {
+  /* Phones: give the file name the width of the row and drop the button below it. */
+  .file-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .file-row .file-meta {
+    grid-column: 2;
+  }
+  .file-row .dl {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .file-row .dl-status {
+    grid-column: 1 / -1;
+  }
+
   .to-top {
     right: 14px;
     bottom: 14px;
