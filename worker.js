@@ -660,10 +660,6 @@ async function handleDeleteShare(env, id) {
 // The receiver finishing one file can clear just that file; the rest of the handoff stays.
 async function handleDeleteFile(env, shareId, fileId) {
   await ensureSchema(env);
-  const share = await env.DB.prepare('SELECT id FROM share_things_shares WHERE id = ?')
-    .bind(shareId)
-    .first();
-  if (!share) return json({ deleted: true, shareGone: true, remaining: 0 });
 
   const file = await env.DB.prepare(
     'SELECT id, r2_key, chunk_count FROM share_things_files WHERE id = ? AND share_id = ?'
@@ -685,15 +681,13 @@ async function handleDeleteFile(env, shareId, fileId) {
     .bind(shareId)
     .first();
   const remaining = Number(left && left.count) || 0;
+  if (remaining > 0) return json({ deleted: true, shareGone: false, remaining });
 
-  if (remaining === 0) {
-    const clean = await purgeShare(env, shareId);
-    if (!clean) return fail(503, 'Could not delete everything yet. Try again in a moment.');
-    await promoteQueue(env).catch(() => {});
-    return json({ deleted: true, shareGone: true, remaining: 0 });
-  }
-
-  return json({ deleted: true, shareGone: false, remaining });
+  // Last file: the handoff is empty, so clear the share itself and free the queue.
+  const clean = await purgeShare(env, shareId);
+  if (!clean) return fail(503, 'Could not delete everything yet. Try again in a moment.');
+  await promoteQueue(env).catch(() => {});
+  return json({ deleted: true, shareGone: true, remaining: 0 });
 }
 
 function contentDisposition(name) {

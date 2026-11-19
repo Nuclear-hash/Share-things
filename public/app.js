@@ -44,6 +44,20 @@
     return /^video\//i.test(type || '') || VIDEO_NAME_RE.test(name);
   }
 
+  function fileCount(count) {
+    return `${count} file${count === 1 ? '' : 's'}`;
+  }
+
+  function sentLine(count) {
+    return count === 1 ? 'Someone sent you a file' : 'Someone sent you files';
+  }
+
+  function ackCopy(count) {
+    return count === 1
+      ? '<h2>Got the file?</h2><p>Say yes and it is deleted right now instead of waiting out the clock.</p>'
+      : '<h2>Got everything?</h2><p>Say yes and these files are deleted right now instead of waiting out the clock.</p>';
+  }
+
   function deliveredName(file) {
     return file.zipped ? file.name + '.zip' : file.name;
   }
@@ -831,33 +845,27 @@
     return data;
   }
 
-  // One file is gone but the handoff is still open: the heading, file count and the
-  // "got everything?" card must describe what is left, not what was sent.
+  // One file is gone but the handoff is still open: every label that described the
+  // original handoff has to describe what is left instead.
   function syncHandoff(remaining) {
+    const label = fileCount(remaining);
+
     const countEl = document.getElementById('share-files');
-    if (countEl) countEl.textContent = `${remaining} file${remaining === 1 ? '' : 's'}`;
+    if (countEl) countEl.textContent = label;
+
+    const eyebrow = document.getElementById('share-eyebrow');
+    if (eyebrow) eyebrow.textContent = sentLine(remaining);
 
     const titleEl = document.querySelector('[data-auto-heading]');
     if (titleEl) {
-      const left = [...document.querySelectorAll('.file-row')].filter(
-        (row) => !row.querySelector('[data-download]')?.disabled
-      );
-      const nameEl = left.length > 0 ? left[0].querySelector('.file-name') : null;
-      const label =
-        remaining === 1 && nameEl
-          ? nameEl.textContent
-          : `${remaining} file${remaining === 1 ? '' : 's'}`;
-      titleEl.textContent = label;
-      document.title = label + ' — Ferry';
+      const next = document.querySelector('.file-row [data-download]:not([disabled])');
+      const nameEl = next && next.closest('.file-row').querySelector('.file-name');
+      titleEl.textContent = remaining === 1 && nameEl ? nameEl.textContent : label;
+      document.title = titleEl.textContent + ' — Ferry';
     }
 
     const copy = document.getElementById('ack-copy');
-    if (copy) {
-      copy.innerHTML =
-        remaining === 1
-          ? '<h2>Got the file?</h2><p>Say yes and it is deleted right now instead of waiting out the clock.</p>'
-          : '<h2>Got everything?</h2><p>Say yes and these files are deleted right now instead of waiting out the clock.</p>';
-    }
+    if (copy) copy.innerHTML = ackCopy(remaining);
   }
 
   async function deleteShare(shareId) {
@@ -926,15 +934,15 @@
     }
 
     const count = data.files.length;
-    const heading = data.title || (count === 1 ? data.files[0].name : `${count} files`);
+    const heading = data.title || (count === 1 ? data.files[0].name : fileCount(count));
     document.title = heading + ' — Ferry';
 
     app.innerHTML = `
       <section class="share-page rise">
-        <p class="eyebrow">Someone sent you files</p>
+        <p class="eyebrow" id="share-eyebrow">${sentLine(count)}</p>
         <h1${data.title ? '' : ' data-auto-heading="1"'}>${esc(heading)}</h1>
         <p class="share-meta">
-          <span id="share-files">${count} file${count === 1 ? '' : 's'}</span> ·
+          <span id="share-files">${fileCount(count)}</span> ·
           <span class="count" id="share-count"></span>
         </p>
 
@@ -958,10 +966,7 @@
         </section>
 
         <section class="card ack" id="ack-card">
-          <div class="ack-copy" id="ack-copy">
-            <h2>Got everything?</h2>
-            <p>Say yes and these files are deleted right now instead of waiting out the clock.</p>
-          </div>
+          <div class="ack-copy" id="ack-copy">${ackCopy(count)}</div>
           <div class="ack-actions">
             <button class="btn btn-primary" id="ack-yes" type="button">Yes, delete now</button>
             <button class="btn btn-quiet" id="ack-no" type="button">Not yet</button>
@@ -1211,7 +1216,8 @@
             statusEl.innerHTML =
               '<p class="dl-done">Deleted — just that file. The rest of the handoff is still here.</p>';
           }
-          syncHandoff(Number(result.remaining) || 0);
+          const remaining = Number(result.remaining);
+          if (Number.isFinite(remaining)) syncHandoff(remaining);
         } catch (error) {
           removeFile.disabled = false;
           removeFile.textContent = original;
