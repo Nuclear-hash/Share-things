@@ -2,7 +2,7 @@
   "name": "ferry",
   "version": "1.0.0",
   "private": true,
-  "description": "Ferry: send files up to 4 GB, share a link or QR code, and everything is deleted after ten minutes.",
+  "description": "Ferry: send files up to 5 GB, share a link or QR code, and everything is deleted after ten minutes.",
   "type": "module",
   "scripts": {
     "build:vendor": "esbuild vendor/qrcode-entry.js --bundle --minify --format=iife --platform=browser --outfile=public/vendor/qrcode.js",
